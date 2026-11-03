@@ -1004,8 +1004,23 @@
             toggleDrawer(false);
         }
 
-        // INIT
-        document.addEventListener('DOMContentLoaded', async () => {
+                // Manejo de Deep Links (#product-uuid)
+        window.addEventListener('hashchange', handleHashChange);
+        
+        function handleHashChange() {
+            const hash = window.location.hash;
+            if (hash.startsWith('#product-')) {
+                const productId = hash.replace('#product-', '');
+                setTimeout(() => {
+                    const card = document.querySelector(`.product-card[data-id="${productId}"]`);
+                    if(card) {
+                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        card.style.boxShadow = '0 0 0 3px var(--primary-orange)';
+                        setTimeout(() => card.style.boxShadow = '', 2000);
+                    }
+                }, 500);
+            }
+        }
             checkAdminSession(); // Restaura sesión si existía
             
             if (localStorage.getItem('pcd_theme') === 'dark') {
