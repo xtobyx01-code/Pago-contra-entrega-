@@ -528,364 +528,291 @@ const SUPABASE_ANON_KEY = 'sb_publishable_0z18tR6XR7cGhz5ZzYe1qg_jXzChlr8';
             }
         }
 
-        function renderSidebarMenu() {
+                // ==========================================
+        // RENDERIZADO SIDEBAR CON CATEGORÍAS DINÁMICAS
+        // ==========================================
+        async function renderSidebarMenu() {
             const nav = document.getElementById('category-nav-list');
-            // Limpiar excepto "Todos"
+            if (!nav) return;
+            
+            // Limpiar menú excepto "Todos"
             nav.innerHTML = '<a href="#" data-cat="" class="cat-item active"><i>🏠</i> Todos los productos</a>';
             
-            state.categories.forEach(cat => {
-                const a = document.createElement('a');
-                a.href = '#';
-                a.dataset.cat = cat;
-                a.className = 'cat-item';
-                a.innerHTML = `<i>📦</i> ${escapeHtml(cat)}`;
-                a.onclick = (e) => {
-                    e.preventDefault();
-                    setCategory(cat);
-                    toggleDrawer(false);
-                };
-                nav.appendChild(a);
-            });
-        }
-
-        function renderProductGrid() {
-            const container = document.getElementById('products-display-area');
-            const emptyMsg = document.getElementById('empty-state-msg');
-            
-            let filtered = state.products;
-
-            // Filtrar por Categoría
-            if (state.currentCategory) {
-                filtered = filtered.filter(p => p.category === state.currentCategory);
-            }
-
-            // Filtrar por Búsqueda
-            if (state.searchTerm) {
-                const term = state.searchTerm.toLowerCase();
-                filtered = filtered.filter(p => 
-                    p.name.toLowerCase().includes(term) || 
-                    (p.description && p.description.toLowerCase().includes(term))
-                );
-            }
-
-            if (filtered.length === 0) {
-                container.innerHTML = '';
-                emptyMsg.classList.remove('hidden');
-                return;
-            }
-
-            emptyMsg.classList.add('hidden');
-            container.innerHTML = filtered.map(p => createProductCard(p)).join('');
-        }
-
-        function createProductCard(p) {
-            const stockClass = p.stock <= 0 ? 'badge-out' : (p.stock < 5 ? 'badge-low' : 'badge-in');
-            const stockText = p.stock <= 0 ? 'AGOTADO' : `${p.stock} DISP.`;
-            const priceFormatted = parseFloat(p.price).toLocaleString('es-DO', { minimumFractionDigits: 2 });
-            
-            // Imagen fallback
-            const imgUrl = p.image_url || 'https://via.placeholder.com/400x400/e2e8f0/94a3b8?text=Sin+Foto';
-
-            return `
-                <div class="product-card" data-id="${p.id}">
-                    <div class="admin-controls">
-                        <button class="ctrl-btn ctrl-edit" onclick="editProduct('${p.id}')" title="Editar">✏️</button>
-                        <button class="ctrl-btn ctrl-supplier" onclick="contactSupplier('${p.id}')" title="Proveedor">💬</button>
-                        <button class="ctrl-btn ctrl-del" onclick="deleteProduct('${p.id}')" title="Eliminar">🗑️</button>
-                    </div>
-                    <div class="card-image-wrap">
-                        <img src="${imgUrl}" alt="${escapeHtml(p.name)}" class="card-img" loading="lazy">
-                        <span class="badge-stock ${stockClass}">${stockText}</span>
-                    </div>
-                    <div class="card-info">
-                        <div class="card-category">${escapeHtml(p.category || 'General')}</div>
-                        <div class="card-title">${escapeHtml(p.name)}</div>
-                        <div class="card-price">RD$ <span>${priceFormatted}</span></div>
-                        <button class="btn-request" ${p.stock <= 0 ? 'disabled' : ''} onclick="startRequest('${p.id}')">
-                            ${p.stock <= 0 ? 'No Disponible' : '📲 SOLICITAR'}
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
-
-        // ==========================================
-        // INTERACCIÓN USUARIO (ANTI-SPAM & WHATSAPP)
-        // ==========================================
-        let selectedProductId = null;
-
-        function startRequest(productId) {
-            const prod = state.products.find(p => p.id === productId);
-            if (!prod) return;
-            
-            selectedProductId = productId;
-            document.getElementById('req-prod-name').textContent = prod.name;
-            document.getElementById('req-prod-price').textContent = parseFloat(prod.price).toLocaleString('es-DO');
-            document.getElementById('form-request').reset();
-            document.getElementById('honeypot-field').value = ''; // Reset honeypot
-            
-            openModal('modal-request-order');
-        }
-
-        document.getElementById('form-request').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            // 1. Check Honeypot
-            if (document.getElementById('honeypot-field').value !== '') {
-                showToast("Detectado bot. Acción cancelada.", "error");
-                return;
-            }
-
-            // 2. Rate Limiting Local
-            const now = Date.now();
-            const attempts = state.spamAttempts[now.toString()] || 0;
-            if (attempts >= 3) {
-                showToast("Demasiados intentos. Espera unos minutos.", "error");
-                return;
-            }
-            state.spamAttempts[now.toString()] = attempts + 1;
-            localStorage.setItem('pcd_spam_log', JSON.stringify(state.spamAttempts));
-
-            // 3. Validar Datos
-            const name = document.getElementById('req-name').value.trim();
-            const phoneRaw = document.getElementById('req-phone').value.trim();
-            const address = document.getElementById('req-address').value.trim();
-            const notes = document.getElementById('req-notes').value.trim();
-
-            const phoneNorm = normalizePhoneRD(phoneRaw);
-            if (!phoneNorm) {
-                showToast("Teléfono inválido. Usa formato RD (ej: 809...).", "error");
-                return;
-            }
-
-            // 4. Guardar Backup Silencioso en Supabase
-            const orderCode = generateOrderCode();
-            const prod = state.products.find(p => p.id === selectedProductId);
-            
-            const payload = {
-                order_code: orderCode,
-                product_id: prod.id,
-                product_name_snapshot: prod.name,
-                product_price_snapshot: prod.price,
-                customer_name: name,
-                customer_phone: phoneNorm,
-                address_note: address,
-                notes: notes,
-                status: 'nuevo'
-            };
-
             try {
-                const { error } = await supabaseClient.from('web_orders').insert([payload]);
-                if (error) throw error;
-            } catch (e) {
-                console.warn("Backup falló, continuando con WA...", e);
-            }
+                // Intentar leer de tabla categories si existe, sino fallback a products
+                let catsToRender = [];
+                
+                // Verificamos si tenemos permiso/data de categories
+                const { data: catData, error: catErr } = await supabaseClient.from('categories').select('*').order('sort_order');
+                
+                if (!catErr && catData && catData.length > 0) {
+                    catsToRender = catData.map(c => ({ name: c.name, icon: c.icon || '📦' }));
+                } else {
+                    // Fallback: Extraer únicas de productos actuales
+                    const uniqueCats = [...new Set(state.products.map(p => p.category).filter(Boolean))];
+                    catsToRender = uniqueCats.sort().map(name => ({ name, icon: '📦' }));
+                }
 
-            // 5. Construir Mensaje WhatsApp
-            const waNumber = state.settings.whatsapp_number || '+18495238873';
-            const message = `*NUEVO PEDIDO WEB*\n\n` +
-                            `🆔 Código: ${orderCode}\n` +
-                            `👤 Cliente: ${name}\n` +
-                            `📞 Tel: ${phoneNorm}\n` +
-                            `📦 Producto: ${prod.name}\n` +
-                            `💰 Precio: RD$ ${parseFloat(prod.price).toFixed(2)}\n` +
-                            `${address ? `📍 Dir: ${address}\n` : ''}` +
-                            `${notes ? `📝 Notas: ${notes}\n` : ''}\n` +
-                            `_Enviado desde tienda online._`;
+                // Renderizar categorías
+                catsToRender.forEach(c => {
+                    const a = document.createElement('a');
+                    a.href = '#';
+                    a.dataset.cat = c.name;
+                    a.className = 'cat-item';
+                    a.innerHTML = `<i>${c.icon}</i> ${escapeHtml(c.name)}`;
+                    a.onclick = (e) => {
+                        e.preventDefault();
+                        setCategory(c.name);
+                        toggleDrawer(false);
+                    };
+                    nav.appendChild(a);
+                });
 
-            const waLink = `https://wa.me/${waNumber.replace('+','')}?text=${encodeURIComponent(message)}`;
-            
-            closeModal('modal-request-order');
-            window.open(waLink, '_blank');
-            showToast("Pedido enviado a WhatsApp!", "success");
-        });
+                // BOTÓN AGREGAR CATEGORIA (Solo Visible Admin)
+                if (state.isAdmin) {
+                    const btnAdd = document.createElement('button');
+                    btnAdd.type = 'button'; // Importante para forms
+                    btnAdd.className = 'cat-item add-cat-btn';
+                    btnAdd.style.cssText = "margin-top:15px; background:#f8fafc; border:2px dashed #cbd5e1; color:#64748b; font-weight:600; width:100%; text-align:left; padding:12px 20px; cursor:pointer;";
+                    btnAdd.innerHTML = '➕ Agregar Nueva Categoría';
+                    btnAdd.onclick = () => openAddCategoryModal();
+                    nav.appendChild(btnAdd);
+                }
 
-        // ==========================================
-        // PANEL ADMIN & GESTIÓN
-        // ==========================================
-        
-        // Trigger Invisible Login
-        let clickCount = 0;
-        document.getElementById('admin-trigger-icon').addEventListener('click', () => {
-            clickCount++;
-            if (clickCount >= 3) {
-                clickCount = 0;
-                if (!state.isAdmin) openModal('modal-admin-login');
-                else toggleAdminMode(false); // Logout rápido si ya está logueado
-            }
-        });
-
-        document.getElementById('form-admin-login').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const pass = document.getElementById('adm-pass').value;
-            // Validación simple contra contraseña hardcoded o auth real
-            // Para MVP usamos validación directa al usuario creado en Auth
-            const { data, error } = await supabaseClient.auth.signInWithPassword({
-                email: 'xtobyx001@gmail.com',
-                password: pass
-            });
-
-            if (error) {
-                showToast("Credenciales incorrectas", "error");
-                return;
-            }
-            
-            state.isAdmin = true;
-            document.body.classList.add('is-admin');
-            closeModal('modal-admin-login');
-            showToast("Modo Admin Activado", "success");
-            renderProductGrid(); // Re-render para mostrar controles
-        });
-
-        function toggleAdminMode(forceOff = false) {
-            if (forceOff || state.isAdmin) {
-                state.isAdmin = false;
-                document.body.classList.remove('is-admin');
-                supabaseClient.auth.signOut();
-                showToast("Sesión cerrada", "info");
-                renderProductGrid();
+            } catch (err) {
+                console.error("Error sidebar:", err);
             }
         }
 
         // ==========================================
-// SISTEMA ADMIN REAL: EDITAR / BORRAR / PROVEEDOR
-// ==========================================
+        // GESTIÓN DE CATEGORÍAS (MODAL ADD)
+        // ==========================================
+        function openAddCategoryModal() {
+            let modal = document.getElementById('modal-add-category');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'modal-add-category';
+                modal.className = 'modal-overlay hidden';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width:350px;">
+                        <div class="modal-header"><h3>➕ Nueva Categoría</h3><button onclick="closeModal('modal-add-category')" class="close-modal">✕</button></div>
+                        <div class="modal-body">
+                            <form id="form-new-cat">
+                                <div class="form-group"><label>Nombre *</label><input type="text" id="nc-name" class="form-input" required placeholder="Ej: Electrónica"></div>
+                                <div class="form-group"><label>Emoji (Opcional)</label><input type="text" id="nc-icon" class="form-input" maxlength="2" placeholder=""></div>
+                                <button type="submit" class="btn-primary">Crear</button>
+                            </form>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+                
+                // Listener Submit
+                setTimeout(() => {
+                    const form = document.getElementById('form-new-cat');
+                    if(form) {
+                        form.onsubmit = async (e) => {
+                            e.preventDefault();
+                            const name = document.getElementById('nc-name').value.trim();
+                            const icon = document.getElementById('nc-icon').value.trim() || '📦';
+                            
+                            if(!name) return showToast("Nombre requerido", "error");
 
-let editingProductId = null; // Trackea qué producto se está modificando
+                            const { error } = await supabaseClient.from('categories').insert([{ name, icon }]);
+                            
+                            if(error) {
+                                if(error.code === '23505') showToast("Ya existe esa categoría", "warning");
+                                else showToast("Error: " + error.message, "error");
+                            } else {
+                                showToast("Categoría creada ✅", "success");
+                                closeModal('modal-add-category');
+                                await fetchCategoriesAndProducts(); // Recarga datos
+                            }
+                        };
+                    }
+                }, 100);
+            }
+            
+            setTimeout(() => modal.classList.add('show'), 10);
+        }
 
-function openAdminModal(title, fieldsHtml, onSubmitFn) {
-    // Crea un modal dinámico simple si no existe uno específico
-    let modal = document.getElementById('modal-admin-edit');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'modal-admin-edit';
-        modal.className = 'modal-overlay hidden';
-        modal.innerHTML = `
-            <div class="modal-content" style="max-width:400px;">
-                <div class="modal-header"><h3 id="adm-modal-title">Editar</h3><button onclick="closeModal('modal-admin-edit')" class="close-modal">✕</button></div>
-                <div class="modal-body" id="adm-modal-body"></div>
-            </div>`;
-        document.body.appendChild(modal);
-    }
-    
-    document.getElementById('adm-modal-title').textContent = title;
-    document.getElementById('adm-modal-body').innerHTML = fieldsHtml + `<button type="button" class="btn-primary" id="adm-save-btn">Guardar Cambios</button>`;
-    
-    document.getElementById('adm-save-btn').onclick = async () => {
-        await onSubmitFn();
-        closeModal('modal-admin-edit');
-        fetchCategoriesAndProducts(); // Recarga datos tras guardar
-    };
-    
-    modal.classList.remove('hidden');
-    setTimeout(() => modal.classList.add('show'), 10);
-}
-
-function editProduct(id) {
-    const prod = state.products.find(p => p.id === id);
-    if (!prod) return;
-    editingProductId = id;
-
-    const html = `
-        <div class="form-group"><label>Nombre</label><input type="text" id="ed-name" value="${escapeHtml(prod.name)}" class="form-input"></div>
-        <div class="form-group"><label>Precio (RD$)</label><input type="number" step="0.01" id="ed-price" value="${prod.price}" class="form-input"></div>
-        <div class="form-group"><label>Categoría</label><input type="text" id="ed-cat" value="${escapeHtml(prod.category || '')}" class="form-input" placeholder="Ej: Ropa, Calzado"></div>
-        <div class="form-group"><label>Stock Actual</label><input type="number" id="ed-stock" value="${prod.stock}" class="form-input"></div>
-        <div class="form-group"><label>URL Imagen (Opcional)</label><input type="url" id="ed-img" value="${prod.image_url || ''}" class="form-input" placeholder="https://..."></div>
-        <div class="form-group"><label>WhatsApp Proveedor</label><input type="tel" id="ed-sup" value="${prod.supplier_whatsapp || ''}" class="form-input" placeholder="+1809..."></div>
-        <div class="form-group" style="display:flex;align-items:center;gap:10px;"><input type="checkbox" id="ed-active" ${prod.is_active ? 'checked' : ''}><label for="ed-active">Visible en Tienda</label></div>
-    `;
-
-    openAdminModal("✏️ Editar Producto", html, async () => {
-        const updates = {
-            name: document.getElementById('ed-name').value.trim(),
-            price: parseFloat(document.getElementById('ed-price').value),
-            category: document.getElementById('ed-cat').value.trim() || null,
-            stock: parseInt(document.getElementById('ed-stock').value),
-            image_url: document.getElementById('ed-img').value.trim() || null,
-            supplier_whatsapp: document.getElementById('ed-sup').value.trim() || null,
-            is_active: document.getElementById('ed-active').checked
-        };
-
-        const { error } = await supabaseClient.from('products').update(updates).eq('id', editingProductId);
-        if (error) showToast("Error al guardar: " + error.message, "error");
-        else showToast("Producto actualizado ✅", "success");
-    });
-}
-
-function deleteProduct(id) {
-    const prod = state.products.find(p => p.id === id);
-    if (!confirm(`¿Seguro quieres ELIMINAR "${prod?.name}"?\nEsta acción borra la ficha pero NO la foto del servidor.`)) return;
-
-    // Opción A: Borrado Suave (Recomendado para historial) -> Solo oculta
-    // const { error } = await supabaseClient.from('products').update({ is_active: false }).eq('id', id);
-    
-    // Opción B: Borrado Físico (Libera espacio BD) -> Usa UPDATE below commented out originally was DELETE
-    const { error } = await supabaseClient.from('products').delete().eq('id', id); 
-    
-    if (error) showToast("Error eliminando: " + error.message, "error");
-    else {
-        showToast("Producto eliminado 🗑️", "info");
-        fetchCategoriesAndProducts();
-    }
-}
-
-function contactSupplier(id) {
-    const p = state.products.find(x=>x.id===id);
-    if(p && p.supplier_whatsapp) {
-        const msg = encodeURIComponent(`Hola, necesito info sobre reposición/disponibilidad del producto: ${p.name}. Ref interno tienda.`);
-        window.open(`https://wa.me/${p.supplier_whatsapp.replace(/\D/g,'')}?text=${msg}`, '_blank');
-    } else {
-        showToast("⚠️ No hay WhatsApp de proveedor asignado a este ítem.", "warning");
-    }
-}
 
         // ==========================================
-        // EVENT LISTENERS UI
+        // SISTEMA ADMIN REAL: EDITAR / BORRAR / PROVEEDOR
+        // ==========================================
+        let editingProductId = null; 
+
+        function openAdminModal(title, fieldsHtml, onSubmitFn) {
+            let modal = document.getElementById('modal-admin-edit');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'modal-admin-edit';
+                modal.className = 'modal-overlay hidden';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width:400px;">
+                        <div class="modal-header"><h3 id="adm-modal-title">Editar</h3><button onclick="closeModal('modal-admin-edit')" class="close-modal">✕</button></div>
+                        <div class="modal-body" id="adm-modal-body"></div>
+                    </div>`;
+                document.body.appendChild(modal);
+            }
+            
+            document.getElementById('adm-modal-title').textContent = title;
+            document.getElementById('adm-modal-body').innerHTML = fieldsHtml + `<button type="button" class="btn-primary" id="adm-save-btn">Guardar Cambios</button>`;
+            
+            document.getElementById('adm-save-btn').onclick = async () => {
+                await onSubmitFn();
+                closeModal('modal-admin-edit');
+                await fetchCategoriesAndProducts(); // Recarga tras guardar
+            };
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => modal.classList.add('show'), 10);
+        }
+
+        function editProduct(id) {
+            const prod = state.products.find(p => p.id === id);
+            if (!prod) return;
+            editingProductId = id;
+
+            const html = `
+                <div class="form-group"><label>Nombre</label><input type="text" id="ed-name" value="${escapeHtml(prod.name)}" class="form-input"></div>
+                <div class="form-group"><label>Precio (RD$)</label><input type="number" step="0.01" id="ed-price" value="${prod.price}" class="form-input"></div>
+                <div class="form-group"><label>Categoría</label><input type="text" id="ed-cat" value="${escapeHtml(prod.category || '')}" class="form-input" placeholder="Ej: Ropa"></div>
+                <div class="form-group"><label>Stock</label><input type="number" id="ed-stock" value="${prod.stock}" class="form-input"></div>
+                <div class="form-group"><label>URL Imagen</label><input type="url" id="ed-img" value="${prod.image_url || ''}" class="form-input" placeholder="https://..."></div>
+                <div class="form-group"><label>WhatsApp Proveedor</label><input type="tel" id="ed-sup" value="${prod.supplier_whatsapp || ''}" class="form-input" placeholder="+1809..."></div>
+                <div class="form-group" style="display:flex;align-items:center;gap:10px;"><input type="checkbox" id="ed-active" ${prod.is_active ? 'checked' : ''}><label for="ed-active">Visible en Tienda</label></div>
+            `;
+
+            openAdminModal("✏️ Editar Producto", html, async () => {
+                const updates = {
+                    name: document.getElementById('ed-name').value.trim(),
+                    price: parseFloat(document.getElementById('ed-price').value),
+                    category: document.getElementById('ed-cat').value.trim() || null,
+                    stock: parseInt(document.getElementById('ed-stock').value),
+                    image_url: document.getElementById('ed-img').value.trim() || null,
+                    supplier_whatsapp: document.getElementById('ed-sup').value.trim() || null,
+                    is_active: document.getElementById('ed-active').checked
+                };
+
+                const { error } = await supabaseClient.from('products').update(updates).eq('id', editingProductId);
+                if (error) showToast("Error: " + error.message, "error");
+                else showToast("Actualizado ✅", "success");
+            });
+        }
+
+        function deleteProduct(id) {
+            const prod = state.products.find(p => p.id === id);
+            if (!confirm(`¿Eliminar "${prod?.name}"?`)) return;
+
+            const { error } = await supabaseClient.from('products').delete().eq('id', id); 
+            
+            if (error) showToast("Error: " + error.message, "error");
+            else {
+                showToast("Eliminado 🗑️", "info");
+                await fetchCategoriesAndProducts();
+            }
+        }
+
+        function contactSupplier(id) {
+            const p = state.products.find(x=>x.id===id);
+            if(p && p.supplier_whatsapp) {
+                const msg = encodeURIComponent(`Hola, info sobre: ${p.name}. Ref tienda.`);
+                window.open(`https://wa.me/${p.supplier_whatsapp.replace(/\D/g,'')}?text=${msg}`, '_blank');
+            } else {
+                showToast("Sin proveedor asignado", "warning");
+            }
+        }
+
+        // ==========================================
+        // EVENT LISTENERS UI (RESTAURADOS Y SEGUROS)
         // ==========================================
         function setupEventListeners() {
             // Drawer Toggle
-            const drawer = document.getElementById('side-menu');
+            const drawerBtn = document.getElementById('open-drawer-btn');
+            const closeBtn = document.getElementById('close-drawer-btn');
             const overlay = document.getElementById('menu-overlay');
             
-            document.getElementById('open-drawer-btn').onclick = () => toggleDrawer(true);
-            document.getElementById('close-drawer-btn').onclick = () => toggleDrawer(false);
-            overlay.onclick = () => toggleDrawer(false);
+            if(drawerBtn) drawerBtn.onclick = () => toggleDrawer(true);
+            if(closeBtn) closeBtn.onclick = () => toggleDrawer(false);
+            if(overlay) overlay.onclick = () => toggleDrawer(false);
 
             // Search
-            document.getElementById('global-search-input').oninput = (e) => {
+            const searchInput = document.getElementById('global-search-input');
+            const searchBtn = document.getElementById('search-submit-btn');
+            
+            if(searchInput) searchInput.oninput = (e) => {
                 state.searchTerm = e.target.value;
                 renderProductGrid();
             };
-            document.getElementById('search-submit-btn').onclick = () => {
-                 state.searchTerm = document.getElementById('global-search-input').value;
+            if(searchBtn) searchBtn.onclick = () => {
+                 state.searchTerm = searchInput.value;
                  renderProductGrid();
             };
 
             // Theme Toggle
-            document.getElementById('theme-toggle-btn').onclick = () => {
+            const themeBtn = document.getElementById('theme-toggle-btn');
+            if(themeBtn) themeBtn.onclick = () => {
                 document.body.classList.toggle('dark-mode');
                 const isDark = document.body.classList.contains('dark-mode');
                 localStorage.setItem('pcd_theme', isDark ? 'dark' : 'light');
-                document.getElementById('theme-toggle-btn').textContent = isDark ? '☀️' : '🌙';
+                themeBtn.textContent = isDark ? '☀️' : '🌙';
             };
+
+            // Admin Trigger (Triple Click)
+            const adminIcon = document.getElementById('admin-trigger-icon');
+            let clickCount = 0;
+            if(adminIcon) {
+                adminIcon.addEventListener('click', () => {
+                    clickCount++;
+                    if (clickCount >= 3) {
+                        clickCount = 0;
+                        if (!state.isAdmin) openModal('modal-admin-login');
+                        else toggleAdminMode(false); 
+                    }
+                });
+            }
+
+            // Login Form
+            const loginForm = document.getElementById('form-admin-login');
+            if(loginForm) {
+                loginForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const pass = document.getElementById('adm-pass').value;
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({
+                        email: 'xtobyx001@gmail.com',
+                        password: pass
+                    });
+
+                    if (error) {
+                        showToast("Credenciales incorrectas", "error");
+                        return;
+                    }
+                    
+                    state.isAdmin = true;
+                    document.body.classList.add('is-admin');
+                    closeModal('modal-admin-login');
+                    showToast("Modo Admin Activado", "success");
+                    await fetchCategoriesAndProducts(); // Refresh para mostrar botones admin
+                });
+            }
         }
 
         function toggleDrawer(open) {
             const drawer = document.getElementById('side-menu');
             const overlay = document.getElementById('menu-overlay');
-            if (open) {
-                drawer.classList.add('open');
-                overlay.classList.add('show');
-            } else {
-                drawer.classList.remove('open');
-                overlay.classList.remove('show');
+            if (drawer && overlay) {
+                if (open) {
+                    drawer.classList.add('open');
+                    overlay.classList.add('show');
+                } else {
+                    drawer.classList.remove('open');
+                    overlay.classList.remove('show');
+                }
             }
         }
 
         function setCategory(cat) {
             state.currentCategory = cat;
-            // Update Active Class Sidebar
             document.querySelectorAll('.cat-item').forEach(el => {
                 el.classList.toggle('active', el.dataset.cat === cat);
             });
@@ -895,16 +822,20 @@ function contactSupplier(id) {
         function resetFilters() {
             state.currentCategory = null;
             state.searchTerm = '';
-            document.getElementById('global-search-input').value = '';
+            const input = document.getElementById('global-search-input');
+            if(input) input.value = '';
             setCategory(null);
         }
 
-        // INIT
+        // ==========================================
+        // INICIALIZACIÓN FINAL SEGURA
+        // ==========================================
         document.addEventListener('DOMContentLoaded', async () => {
             // Load saved theme
             if (localStorage.getItem('pcd_theme') === 'dark') {
                 document.body.classList.add('dark-mode');
-                document.getElementById('theme-toggle-btn').textContent = '☀️';
+                const tb = document.getElementById('theme-toggle-btn');
+                if(tb) tb.textContent = '☀️';
             }
             
             setupEventListeners();
