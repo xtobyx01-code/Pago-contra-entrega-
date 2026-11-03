@@ -674,8 +674,12 @@
                 console.warn("Backup falló", err);
             }
 
-            const waNumber = state.settings.whatsapp_number || '+18495238873';
-            const message = `*NUEVO PEDIDO WEB*\n\n🆔 Código: ${orderCode}\n👤 Cliente: ${name}\n📞 Tel: ${phoneNorm}\n📦 Producto: ${prod.name}\n💰 Precio: RD$ ${parseFloat(prod.price).toFixed(2)}\n${address ? `📍 Dir: ${address}\n` : ''}_Enviado desde tienda online._`;
+                        const waNumber = state.settings.whatsapp_number || '+18495238873';
+            
+            // Generar link directo al producto para que tú lo veas como Admin
+            const productUrl = `${window.location.origin}${window.location.pathname}#product-${prod.id}`;
+            
+            const message = `*NUEVO PEDIDO WEB*\n\n🆔 Código: ${orderCode}\n👤 Cliente: ${name}\n📞 Tel: ${phoneNorm}\n📦 Producto: ${prod.name}\n💰 Precio: RD$ ${parseFloat(prod.price).toFixed(2)}\n${address ? `📍 Dir: ${address}\n` : ''}\n🔗 Ver Artículo: ${productUrl}\n_Enviado desde tienda online._`;
 
             const waLink = `https://wa.me/${waNumber.replace('+','')}?text=${encodeURIComponent(message)}`;
             
