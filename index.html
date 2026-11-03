@@ -367,7 +367,9 @@
                 <form id="form-admin-login">
                     <div class="form-group">
                         <label class="form-label">Correo Electrónico</label>
-                        <input type="email" id="adm-email" class="form-input" value="xtobyx001@gmail.com" readonly style="opacity:0.7;">
+                        <input type="hidden" id="adm-email" value="xtobyx001@gmail.com"> <!-- Valor oculto pero presente para JS -->
+<label class="form-label">Usuario Admin</label>
+<input type="text" class="form-input" value="ADMIN" disabled style="background:#f1f5f9; color:#64748b;">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Contraseña</label>
