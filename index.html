@@ -1029,9 +1029,14 @@
                 if(tb) tb.textContent = '☀️';
             }
             
-            setupEventListeners();
+                        setupEventListeners();
             await loadAppSettings();
             await fetchProducts();
+            
+            // Procesar hash inicial si existe
+            if(window.location.hash) {
+                handleHashChange();
+            }
         });
 
     </script>
