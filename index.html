@@ -747,17 +747,98 @@ const SUPABASE_ANON_KEY = 'sb_publishable_0z18tR6XR7cGhz5ZzYe1qg_jXzChlr8';
             }
         }
 
-        // Funciones CRUD Admin (Placeholders para expansión futura)
-        function editProduct(id) { alert("Editor de producto: " + id + "\n(Funcionalidad completa en próxima iteración)"); }
-        function deleteProduct(id) { if(confirm("¿Eliminar este producto?")) alert("Eliminado ID: " + id); }
-        function contactSupplier(id) {
-            const p = state.products.find(x=>x.id===id);
-            if(p && p.supplier_whatsapp) {
-                window.open(`https://wa.me/${p.supplier_whatsapp.replace('+','')}`, '_blank');
-            } else {
-                showToast("No hay contacto proveedor registrado", "warning");
-            }
-        }
+        // ==========================================
+// SISTEMA ADMIN REAL: EDITAR / BORRAR / PROVEEDOR
+// ==========================================
+
+let editingProductId = null; // Trackea qué producto se está modificando
+
+function openAdminModal(title, fieldsHtml, onSubmitFn) {
+    // Crea un modal dinámico simple si no existe uno específico
+    let modal = document.getElementById('modal-admin-edit');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-admin-edit';
+        modal.className = 'modal-overlay hidden';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width:400px;">
+                <div class="modal-header"><h3 id="adm-modal-title">Editar</h3><button onclick="closeModal('modal-admin-edit')" class="close-modal">✕</button></div>
+                <div class="modal-body" id="adm-modal-body"></div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    
+    document.getElementById('adm-modal-title').textContent = title;
+    document.getElementById('adm-modal-body').innerHTML = fieldsHtml + `<button type="button" class="btn-primary" id="adm-save-btn">Guardar Cambios</button>`;
+    
+    document.getElementById('adm-save-btn').onclick = async () => {
+        await onSubmitFn();
+        closeModal('modal-admin-edit');
+        fetchCategoriesAndProducts(); // Recarga datos tras guardar
+    };
+    
+    modal.classList.remove('hidden');
+    setTimeout(() => modal.classList.add('show'), 10);
+}
+
+function editProduct(id) {
+    const prod = state.products.find(p => p.id === id);
+    if (!prod) return;
+    editingProductId = id;
+
+    const html = `
+        <div class="form-group"><label>Nombre</label><input type="text" id="ed-name" value="${escapeHtml(prod.name)}" class="form-input"></div>
+        <div class="form-group"><label>Precio (RD$)</label><input type="number" step="0.01" id="ed-price" value="${prod.price}" class="form-input"></div>
+        <div class="form-group"><label>Categoría</label><input type="text" id="ed-cat" value="${escapeHtml(prod.category || '')}" class="form-input" placeholder="Ej: Ropa, Calzado"></div>
+        <div class="form-group"><label>Stock Actual</label><input type="number" id="ed-stock" value="${prod.stock}" class="form-input"></div>
+        <div class="form-group"><label>URL Imagen (Opcional)</label><input type="url" id="ed-img" value="${prod.image_url || ''}" class="form-input" placeholder="https://..."></div>
+        <div class="form-group"><label>WhatsApp Proveedor</label><input type="tel" id="ed-sup" value="${prod.supplier_whatsapp || ''}" class="form-input" placeholder="+1809..."></div>
+        <div class="form-group" style="display:flex;align-items:center;gap:10px;"><input type="checkbox" id="ed-active" ${prod.is_active ? 'checked' : ''}><label for="ed-active">Visible en Tienda</label></div>
+    `;
+
+    openAdminModal("✏️ Editar Producto", html, async () => {
+        const updates = {
+            name: document.getElementById('ed-name').value.trim(),
+            price: parseFloat(document.getElementById('ed-price').value),
+            category: document.getElementById('ed-cat').value.trim() || null,
+            stock: parseInt(document.getElementById('ed-stock').value),
+            image_url: document.getElementById('ed-img').value.trim() || null,
+            supplier_whatsapp: document.getElementById('ed-sup').value.trim() || null,
+            is_active: document.getElementById('ed-active').checked
+        };
+
+        const { error } = await supabaseClient.from('products').update(updates).eq('id', editingProductId);
+        if (error) showToast("Error al guardar: " + error.message, "error");
+        else showToast("Producto actualizado ✅", "success");
+    });
+}
+
+function deleteProduct(id) {
+    const prod = state.products.find(p => p.id === id);
+    if (!confirm(`¿Seguro quieres ELIMINAR "${prod?.name}"?\nEsta acción borra la ficha pero NO la foto del servidor.`)) return;
+
+    // Opción A: Borrado Suave (Recomendado para historial) -> Solo oculta
+    // const { error } = await supabaseClient.from('products').update({ is_active: false }).eq('id', id);
+    
+    // Opción B: Borrado Físico (Libera espacio BD) -> Usa UPDATE below commented out originally was DELETE
+    const { error } = await supabaseClient.from('products').delete().eq('id', id); 
+    
+    if (error) showToast("Error eliminando: " + error.message, "error");
+    else {
+        showToast("Producto eliminado 🗑️", "info");
+        fetchCategoriesAndProducts();
+    }
+}
+
+function contactSupplier(id) {
+    const p = state.products.find(x=>x.id===id);
+    if(p && p.supplier_whatsapp) {
+        const msg = encodeURIComponent(`Hola, necesito info sobre reposición/disponibilidad del producto: ${p.name}. Ref interno tienda.`);
+        window.open(`https://wa.me/${p.supplier_whatsapp.replace(/\D/g,'')}?text=${msg}`, '_blank');
+    } else {
+        showToast("⚠️ No hay WhatsApp de proveedor asignado a este ítem.", "warning");
+    }
+}
 
         // ==========================================
         // EVENT LISTENERS UI
