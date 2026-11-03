@@ -333,29 +333,32 @@
         </footer>
     </aside>
 
-    <!-- HEADER -->
+        <!-- HEADER COMPACTO -->
     <header class="main-header">
         <div class="header-left">
             <button id="open-drawer-btn">☰</button>
             <a href="/" class="logo-link">
-                <img src="assets/logo-horizontal.png" alt="Logo" class="site-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
-                <span style="display:none; color:white; font-weight:800; font-size:1.2rem;">PAGO CONTRA ENTREGA</span>
+                <!-- Intenta cargar imagen, si falla muestra texto simple -->
+                <img src="assets/logo-horizontal.png" alt="Logo" class="site-logo" onerror="this.style.display='none'; document.getElementById('fallback-logo').style.display='block'">
+                <span id="fallback-logo" class="logo-text-only" style="display:none;">PAGO CONTRA ENTREGA</span>
             </a>
         </div>
         
         <div class="search-container">
-            <input type="text" id="global-search-input" placeholder="Buscar productos...">
+            <input type="text" id="global-search-input" placeholder="Buscar...">
             <button id="search-submit-btn">🔍</button>
         </div>
 
-                <div class="header-right actions">
-            <!-- Botón Agregar Producto (Solo visible si es admin) -->
-            <button id="add-product-btn" class="ctrl-btn ctrl-add hidden" style="background:#10b981; color:white; width:auto; padding:0 12px; font-weight:700;" onclick="openNewProductModal()">➕ Nuevo</button>
-            
+        <div class="header-right actions">
             <button id="admin-trigger-icon" title="Admin">⚙️</button>
             <button id="theme-toggle-btn" title="Tema">🌙</button>
         </div>
     </header>
+
+    <!-- BOTÓN FLOTANTE AGREGAR PRODUCTO (Solo Admin) -->
+    <button id="add-product-btn" class="fab-button" onclick="openNewProductModal()" title="Nuevo Producto">
+        ➕
+    </button>
 
     <!-- CONTENIDO PRINCIPAL -->
     <main class="content-wrapper">
