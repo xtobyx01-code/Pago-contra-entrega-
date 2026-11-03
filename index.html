@@ -823,12 +823,16 @@
         // ==========================================
         // GESTIÓN DE CATEGORÍAS (SIMULADA SIN TABLA EXTERNA)
         // ==========================================
-                function handleAddCategoryClick() {
+                        // Variable global para trackear si el modal ya fue inicializado
+        let categoryModalInitialized = false;
+
+        function handleAddCategoryClick() {
             if (!state.isAdmin) {
                 showToast("Acceso denegado", "error");
                 return;
             }
 
+            // Si el modal no existe, crearlo
             let modal = document.getElementById('modal-add-category');
             if (!modal) {
                 modal = document.createElement('div');
@@ -836,48 +840,86 @@
                 modal.className = 'modal-overlay hidden';
                 modal.innerHTML = `
                     <div class="modal-content" style="max-width:350px;">
-                        <div class="modal-header"><h3>➕ Nueva Categoría</h3><button onclick="closeModal('modal-add-category')" class="close-modal">✕</button></div>
+                        <div class="modal-header">
+                            <h3>➕ Nueva Categoría</h3>
+                            <button onclick="closeModal('modal-add-category')" class="close-modal">✕</button>
+                        </div>
                         <div class="modal-body">
                             <form id="form-new-cat">
-                                <div class="form-group"><label class="form-label">Nombre *</label><input type="text" id="nc-name" class="form-input" required placeholder="Ej: Electrónica"></div>
-                                <div class="form-group"><label class="form-label">Emoji (Opcional)</label><input type="text" id="nc-icon" class="form-input" maxlength="2" placeholder="📱"></div>
+                                <div class="form-group">
+                                    <label class="form-label">Nombre *</label>
+                                    <input type="text" id="nc-name" class="form-input" required placeholder="Ej: Electrónica">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Emoji (Opcional)</label>
+                                    <input type="text" id="nc-icon" class="form-input" maxlength="2" placeholder="📱">
+                                </div>
                                 <button type="submit" class="btn-primary">Crear Categoría</button>
                             </form>
                         </div>
                     </div>`;
                 document.body.appendChild(modal);
-                
-                setTimeout(() => {
-                    const form = document.getElementById('form-new-cat');
-                    if(form) {
-                        form.onsubmit = async (e) => {
-                            e.preventDefault();
-                            const name = document.getElementById('nc-name').value.trim();
-                            const icon = document.getElementById('nc-icon').value.trim() || '📦';
-                            
-                            if(!name) return showToast("Nombre requerido", "error");
-
-                            try {
-                                const { error } = await supabaseClient.from('categories').insert([{ name, icon }]);
-                                
-                                if(error) {
-                                    if(error.code === '23505') showToast("Esta categoría ya existe", "warning");
-                                    else showToast("Error: " + error.message, "error");
-                                } else {
-                                    showToast("Categoría creada ✅", "success");
-                                    closeModal('modal-add-category');
-                                    await fetchProducts(); // Recarga datos para ver cambios
-                                }
-                            } catch (err) {
-                                console.error(err);
-                                showToast("Error guardando categoría", "error");
-                            }
-                        };
-                    }
-                }, 100);
             }
-            
-            setTimeout(() => modal.classList.add('show'), 10);
+
+            // Inicializar listener SOLO UNA VEZ
+            if (!categoryModalInitialized) {
+                const form = document.getElementById('form-new-cat');
+                if (form) {
+                    form.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        
+                        const nameInput = document.getElementById('nc-name');
+                        const iconInput = document.getElementById('nc-icon');
+                        
+                        const name = nameInput.value.trim();
+                        const icon = iconInput.value.trim() || '📦';
+                        
+                        if (!name) {
+                            showToast("El nombre es obligatorio", "error");
+                            return;
+                        }
+
+                        // Mostrar feedback visual inmediato
+                        const submitBtn = form.querySelector('.btn-primary');
+                        const originalText = submitBtn.textContent;
+                        submitBtn.textContent = "Guardando...";
+                        submitBtn.disabled = true;
+
+                        try {
+                            const { error } = await supabaseClient.from('categories').insert([{ name, icon }]);
+                            
+                            if (error) {
+                                if (error.code === '23505') {
+                                    showToast("Esta categoría ya existe", "warning");
+                                } else {
+                                    console.error("Supabase Error:", error);
+                                    showToast("Error al guardar: " + error.message, "error");
+                                }
+                            } else {
+                                showToast("Categoría creada ✅", "success");
+                                closeModal('modal-add-category');
+                                nameInput.value = '';
+                                iconInput.value = '';
+                                await fetchProducts(); // Recargar menú lateral
+                            }
+                        } catch (err) {
+                            console.error("Exception:", err);
+                            showToast("Error inesperado", "error");
+                        } finally {
+                            submitBtn.textContent = originalText;
+                            submitBtn.disabled = false;
+                        }
+                    });
+                    
+                    categoryModalInitialized = true;
+                }
+            }
+
+            // Abrir modal con animación suave
+            requestAnimationFrame(() => {
+                modal.classList.remove('hidden');
+                setTimeout(() => modal.classList.add('show'), 10);
+            });
         }
 
         // ==========================================
