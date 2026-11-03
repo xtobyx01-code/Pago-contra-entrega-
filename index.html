@@ -806,15 +806,61 @@
         // ==========================================
         // GESTIÓN DE CATEGORÍAS (SIMULADA SIN TABLA EXTERNA)
         // ==========================================
-        function handleAddCategoryClick() {
+                function handleAddCategoryClick() {
             if (!state.isAdmin) {
                 showToast("Acceso denegado", "error");
                 return;
             }
 
-            // Como no tenemos tabla 'categories', simulamos la creación agregando un producto dummy
-            // O mejor: Mostramos alerta instructiva
-            alert("Para crear una nueva categoría:\n\n1. Ve a cualquier producto existente.\n2. Edítalo.\n3. Cambia su 'Categoría' al nombre deseado (ej: 'Electrónica').\n4. Guarda.\n\nLa categoría aparecerá automáticamente en el menú lateral.");
+            let modal = document.getElementById('modal-add-category');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'modal-add-category';
+                modal.className = 'modal-overlay hidden';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width:350px;">
+                        <div class="modal-header"><h3>➕ Nueva Categoría</h3><button onclick="closeModal('modal-add-category')" class="close-modal">✕</button></div>
+                        <div class="modal-body">
+                            <form id="form-new-cat">
+                                <div class="form-group"><label class="form-label">Nombre *</label><input type="text" id="nc-name" class="form-input" required placeholder="Ej: Electrónica"></div>
+                                <div class="form-group"><label class="form-label">Emoji (Opcional)</label><input type="text" id="nc-icon" class="form-input" maxlength="2" placeholder="📱"></div>
+                                <button type="submit" class="btn-primary">Crear Categoría</button>
+                            </form>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+                
+                setTimeout(() => {
+                    const form = document.getElementById('form-new-cat');
+                    if(form) {
+                        form.onsubmit = async (e) => {
+                            e.preventDefault();
+                            const name = document.getElementById('nc-name').value.trim();
+                            const icon = document.getElementById('nc-icon').value.trim() || '📦';
+                            
+                            if(!name) return showToast("Nombre requerido", "error");
+
+                            try {
+                                const { error } = await supabaseClient.from('categories').insert([{ name, icon }]);
+                                
+                                if(error) {
+                                    if(error.code === '23505') showToast("Esta categoría ya existe", "warning");
+                                    else showToast("Error: " + error.message, "error");
+                                } else {
+                                    showToast("Categoría creada ✅", "success");
+                                    closeModal('modal-add-category');
+                                    await fetchProducts(); // Recarga datos para ver cambios
+                                }
+                            } catch (err) {
+                                console.error(err);
+                                showToast("Error guardando categoría", "error");
+                            }
+                        };
+                    }
+                }, 100);
+            }
+            
+            setTimeout(() => modal.classList.add('show'), 10);
         }
 
         // ==========================================
