@@ -597,9 +597,9 @@
 
             return `
                 <div class="product-card" data-id="${p.id}">
-                    <div class="admin-controls">
-                        <button class="ctrl-btn ctrl-edit" onclick="editProduct('${p.id}')" title="Editar">✏️</button>
-                        <button class="ctrl-btn ctrl-supplier" onclick="contactSupplier('${p.id}')" title="Proveedor">💬</button>
+                                        <div class="admin-controls">
+                        <button class="ctrl-btn ctrl-edit" onclick="editProduct('${p.id}')" title="Editar Ficha">✏️</button>
+                        <button class="ctrl-btn ctrl-supplier" onclick="requestFromSupplier('${p.id}')" title="Pedir al Proveedor">🛒</button>
                         <button class="ctrl-btn ctrl-del" onclick="deleteProduct('${p.id}')" title="Eliminar">🗑️</button>
                     </div>
                     <div class="card-image-wrap">
