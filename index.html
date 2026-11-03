@@ -502,31 +502,40 @@
             }
         }
 
-        function renderSidebarMenu() {
+                function renderSidebarMenu() {
             const nav = document.getElementById('category-nav-list');
             if (!nav) return;
             
-            // Limpiar menú excepto "Todos"
-            nav.innerHTML = '<a href="#" data-cat="" class="cat-item active"><i>🏠</i> Todos los productos</a>';
+            // 1. Determinar qué categoría está activa actualmente
+            const currentCat = state.currentCategory || "";
             
-            // Extraer categorías únicas de los productos actuales
+            // 2. Construir HTML base con "Todos"
+            let html = `<a href="#" data-cat="" class="cat-item ${currentCat === "" ? 'active' : ''}" onclick="setCategory('', event)">
+                <i>🏠</i> Todos los productos
+            </a>`;
+
+            // 3. Extraer categorías únicas ordenadas
             const uniqueCats = [...new Set(state.products.map(p => p.category).filter(Boolean))].sort();
             
+            // 4. Generar enlaces de categorías dinámicas
             uniqueCats.forEach(catName => {
-                const a = document.createElement('a');
-                a.href = '#';
-                a.dataset.cat = catName;
-                a.className = 'cat-item';
-                a.innerHTML = `<i>📦</i> ${escapeHtml(catName)}`;
-                a.onclick = (e) => {
-                    e.preventDefault();
-                    setCategory(catName);
-                    toggleDrawer(false);
-                };
-                nav.appendChild(a);
+                const isActive = currentCat === catName ? 'active' : '';
+                html += `<a href="#" data-cat="${escapeHtml(catName)}" class="cat-item ${isActive}" onclick="setCategory('${escapeHtml(catName)}', event)">
+                    <i>📦</i> ${escapeHtml(catName)}
+                </a>`;
             });
 
-            // Actualizar datalist para el editor
+            // 5. BOTÓN AGREGAR CATEGORÍA (Solo si es Admin)
+            if (state.isAdmin) {
+                html += `<button type="button" class="cat-item add-cat-btn" style="margin-top:10px; background:#f8fafc; border:2px dashed #cbd5e1; color:#64748b; font-weight:600; width:calc(100% - 40px); margin-left:20px; padding:10px; cursor:pointer; border-radius:8px; display:block;" onclick="openAddCategoryModal()">
+                    ➕ Nueva Categoría
+                </button>`;
+            }
+
+            // 6. Inyectar todo de golpe (más eficiente que appendChild uno por uno)
+            nav.innerHTML = html;
+
+            // 7. Actualizar datalist para autocompletado en editor de productos
             const dl = document.getElementById('cat-options');
             if(dl) {
                 dl.innerHTML = uniqueCats.map(c => `<option value="${escapeHtml(c)}">`).join('');
