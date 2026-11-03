@@ -674,34 +674,68 @@
             if (clickCount >= 3) {
                 clickCount = 0;
                 if (!state.isAdmin) openModal('modal-admin-login');
-                else logoutAdmin();
-            }
-        });
-
-        document.getElementById('form-admin-login').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const pass = document.getElementById('adm-pass').value;
-            const { data, error } = await supabaseClient.auth.signInWithPassword({
-                email: 'xtobyx001@gmail.com',
-                password: pass
+                        // ==========================================
+        // TRIGGER ADMIN (Triple Click) & LOGIN LOGIC
+        // ==========================================
+        let clickCount = 0;
+        const adminIcon = document.getElementById('admin-trigger-icon');
+        
+        if(adminIcon) {
+            adminIcon.addEventListener('click', () => {
+                clickCount++;
+                if (clickCount >= 3) {
+                    clickCount = 0;
+                    if (!state.isAdmin) {
+                        openModal('modal-admin-login');
+                    } else {
+                        logoutAdmin();
+                    }
+                }
             });
+        }
 
-            if (error) {
-                showToast("Credenciales incorrectas", "error");
-                return;
-            }
-            
-            state.isAdmin = true;
-            document.body.classList.add('is-admin');
-            closeModal('modal-admin-login');
-            showToast("Modo Admin Activado", "success");
-        });
+        // Listener para el formulario de Login
+        const loginForm = document.getElementById('form-admin-login');
+        if(loginForm) {
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const pass = document.getElementById('adm-pass').value;
+                
+                // Intento de autenticación real contra Supabase Auth
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email: 'xtobyx001@gmail.com',
+                    password: pass
+                });
 
+                if (error) {
+                    showToast("Contraseña incorrecta", "error");
+                    return;
+                }
+                
+                // Éxito: Activar modo Admin visualmente
+                state.isAdmin = true;
+                document.body.classList.add('is-admin');
+                closeModal('modal-admin-login');
+                showToast("Modo Admin Activado ✅", "success");
+                
+                // Recargar productos para mostrar botones de edición/borrado inmediatamente
+                await fetchProducts(); 
+            });
+        }
+
+        // Función única para cerrar sesión
         function logoutAdmin() {
             state.isAdmin = false;
             document.body.classList.remove('is-admin');
-            supabaseClient.auth.signOut();
-            showToast("Sesión cerrada", "info");
+            
+            // Cerrar sesión en Supabase
+            supabaseClient.auth.signOut().then(() => {
+                showToast("Sesión cerrada", "info");
+                // Recargar para ocultar controles admin
+                fetchProducts();
+            }).catch(err => {
+                console.error("Error signout:", err);
+            });
         }
 
         function editProduct(id) {
