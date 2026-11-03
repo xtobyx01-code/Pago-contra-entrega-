@@ -707,17 +707,26 @@
                 e.preventDefault();
                 const pass = document.getElementById('adm-pass').value;
                 
-                // Validación directa contra contraseña conocida (MVP Simple)
-                // Nota: En producción usaríamos sb.auth.signInWithPassword
-                if (pass === 'IZaTXGebMwG4zWNA') { // TU CONTRASEÑA REAL
+                                try {
+                    // Intento de autenticación segura vía Supabase
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({
+                        email: document.getElementById('adm-email').value, // Lee el hidden input
+                        password: pass
+                    });
+
+                    if (error) throw error;
+
+                    // Éxito
                     state.isAdmin = true;
-                    localStorage.setItem('pcd_admin_session', 'true'); // Persistir sesión
+                    localStorage.setItem('pcd_admin_session', 'true');
                     document.body.classList.add('is-admin');
                     closeModal('modal-admin-login');
                     showToast("Modo Admin Activado ✅", "success");
                     await fetchProducts(); 
-                } else {
-                    showToast("Contraseña incorrecta", "error");
+                    
+                } catch (err) {
+                    console.error("Login Error:", err);
+                    showToast("Credenciales inválidas", "error");
                 }
             });
         }
