@@ -275,7 +275,6 @@
         </div>
         <nav id="category-nav-list" class="drawer-nav">
             <a href="#" data-cat="" class="cat-item active"><i>🏠</i> Todos los productos</a>
-            <!-- Categorías dinámicas aquí -->
         </nav>
         <footer class="drawer-footer">
             <p>&copy; 2026 Pago Contra Entrega</p>
@@ -502,7 +501,7 @@
             }
         }
 
-                function renderSidebarMenu() {
+        function renderSidebarMenu() {
             const nav = document.getElementById('category-nav-list');
             if (!nav) return;
             
@@ -532,7 +531,7 @@
                 </button>`;
             }
 
-            // 6. Inyectar todo de golpe (más eficiente que appendChild uno por uno)
+            // 6. Inyectar todo de golpe
             nav.innerHTML = html;
 
             // 7. Actualizar datalist para autocompletado en editor de productos
@@ -669,15 +668,6 @@
         // PANEL ADMIN & GESTIÓN
         // ==========================================
         let clickCount = 0;
-        document.getElementById('admin-trigger-icon').addEventListener('click', () => {
-            clickCount++;
-            if (clickCount >= 3) {
-                clickCount = 0;
-                if (!state.isAdmin) openModal('modal-admin-login');
-                        // ==========================================
-        // TRIGGER ADMIN (Triple Click) & LOGIN LOGIC
-        // ==========================================
-        let clickCount = 0;
         const adminIcon = document.getElementById('admin-trigger-icon');
         
         if(adminIcon) {
@@ -802,6 +792,68 @@
         });
 
         // ==========================================
+        // GESTIÓN DE CATEGORÍAS (ADMIN ONLY)
+        // ==========================================
+        function openAddCategoryModal() {
+            if (!state.isAdmin) {
+                showToast("Acceso denegado", "error");
+                return;
+            }
+
+            let modal = document.getElementById('modal-add-category');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'modal-add-category';
+                modal.className = 'modal-overlay hidden';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width:350px;">
+                        <div class="modal-header"><h3>➕ Nueva Categoría</h3><button onclick="closeModal('modal-add-category')" class="close-modal">✕</button></div>
+                        <div class="modal-body">
+                            <form id="form-new-cat">
+                                <div class="form-group"><label class="form-label">Nombre *</label><input type="text" id="nc-name" class="form-input" required placeholder="Ej: Electrónica"></div>
+                                <div class="form-group"><label class="form-label">Emoji (Opcional)</label><input type="text" id="nc-icon" class="form-input" maxlength="2" placeholder="📱"></div>
+                                <button type="submit" class="btn-primary">Crear Categoría</button>
+                            </form>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+                
+                setTimeout(() => {
+                    const form = document.getElementById('form-new-cat');
+                    if(form) {
+                        form.onsubmit = async (e) => {
+                            e.preventDefault();
+                            const name = document.getElementById('nc-name').value.trim();
+                            const icon = document.getElementById('nc-icon').value.trim() || '📦';
+                            
+                            if(!name) return showToast("Nombre requerido", "error");
+
+                            try {
+                                // Intentamos insertar en tabla categories si existe
+                                const { error } = await supabaseClient.from('categories').insert([{ name, icon }]);
+                                
+                                if(error) {
+                                    console.warn("Tabla categories no disponible:", error.message);
+                                    showToast("Categoría agregada temporalmente (BD pendiente)", "warning");
+                                } else {
+                                    showToast("Categoría creada ✅", "success");
+                                }
+                            } catch (err) {
+                                console.error(err);
+                                showToast("Error guardando categoría", "error");
+                            } finally {
+                                closeModal('modal-add-category');
+                                await fetchProducts(); // Refrescar menú
+                            }
+                        };
+                    }
+                }, 100);
+            }
+            
+            setTimeout(() => modal.classList.add('show'), 10);
+        }
+
+        // ==========================================
         // EVENT LISTENERS UI
         // ==========================================
         function setupEventListeners() {
@@ -848,7 +900,7 @@
             }
         }
 
-                function setCategory(cat, event) {
+        function setCategory(cat, event) {
             if(event) event.preventDefault(); // Evita salto de página
             
             state.currentCategory = cat;
@@ -857,7 +909,6 @@
             renderProductGrid();
             
             // IMPORTANTE: Vuelve a dibujar el menú lateral para actualizar clases 'active'
-            // Esto asegura que si estabas en "Ropa" y vas a "Calzado", el highlight se mueva.
             renderSidebarMenu(); 
             
             // Cierra el drawer automáticamente tras selección (UX móvil)
