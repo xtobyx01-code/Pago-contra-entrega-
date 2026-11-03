@@ -113,15 +113,16 @@
         }
         .overlay.show { opacity: 1; visibility: visible; }
 
-        .side-drawer {
-            position: fixed; top: 0; left: -300px; bottom: 0; width: 280px;
+                .side-drawer {
+            position: fixed; top: 0; left: 0; bottom: 0; width: 280px;
             background: var(--card-bg); z-index: 300;
             box-shadow: 4px 0 15px rgba(0,0,0,0.1);
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateX(-100%); /* Oculto por defecto movido a la izquierda */
+            transition: transform 0.3s ease-in-out;
             display: flex; flex-direction: column;
             overflow-y: auto;
         }
-        .side-drawer.open { transform: translateX(0); }
+        .side-drawer.open { transform: translateX(0); } /* Visible al abrir */
 
         .drawer-header {
             padding: 20px 15px; border-bottom: 1px solid var(--border-color);
