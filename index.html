@@ -791,14 +791,36 @@
             });
         }
 
-        function contactSupplier(id) {
-            const p = state.products.find(x=>x.id===id);
-            if(p && p.supplier_whatsapp) {
-                const msg = encodeURIComponent(`Hola, info sobre: ${p.name}. Ref tienda.`);
-                window.open(`https://wa.me/${p.supplier_whatsapp.replace(/\D/g,'')}?text=${msg}`, '_blank');
-            } else {
-                showToast("Sin proveedor asignado", "warning");
+                function requestFromSupplier(id) {
+            if (!state.isAdmin) {
+                showToast("Acceso restringido", "error");
+                return;
             }
+
+            const prod = state.products.find(p => p.id === id);
+            if (!prod) return;
+
+            if (!prod.supplier_whatsapp) {
+                showToast("⚠️ No hay número de proveedor registrado.", "warning");
+                editProduct(id); // Abre editor para que pongas el número
+                return;
+            }
+
+            // Link público para que el proveedor vea la foto sin login
+            const productUrl = `${window.location.origin}${window.location.pathname}#product-${prod.id}`;
+            
+            const supplierMessage = `*SOLICITUD DE REPOSICIÓN / INFO*\n\n` +
+                                    `Hola, necesito confirmar disponibilidad del siguiente artículo:\n\n` +
+                                    `📦 *Producto:* ${prod.name}\n` +
+                                    `💰 *Precio Venta:* RD$ ${parseFloat(prod.price).toFixed(2)}\n` +
+                                    `🔗 *Ver Foto/Detalle:* ${productUrl}\n\n` +
+                                    `_Gracias por su apoyo._`;
+
+            const cleanPhone = prod.supplier_whatsapp.replace(/\D/g, '');
+            const waLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(supplierMessage)}`;
+            
+            window.open(waLink, '_blank');
+            showToast("Mensaje preparado para proveedor 📲", "success");
         }
 
         // Form Editor Submit
