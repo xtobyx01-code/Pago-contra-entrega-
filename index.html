@@ -496,8 +496,11 @@
                 if (errP) throw errP;
                 state.products = prods || [];
 
-                renderSidebarMenu();
+                                renderSidebarMenu();
                 renderProductGrid();
+                
+                // Procesar hash inicial si existe (para links directos)
+                if(window.location.hash) handleHashChange();
             } catch (e) {
                 console.error("Fetch Error:", e);
                 document.getElementById('products-display-area').innerHTML = '<div class="empty-message"><span>❌</span><p>Error cargando datos.</p></div>';
