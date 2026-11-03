@@ -297,7 +297,10 @@
             <button id="search-submit-btn">🔍</button>
         </div>
 
-        <div class="header-right actions">
+                <div class="header-right actions">
+            <!-- Botón Agregar Producto (Solo visible si es admin) -->
+            <button id="add-product-btn" class="ctrl-btn ctrl-add hidden" style="background:#10b981; color:white; width:auto; padding:0 12px; font-weight:700;" onclick="openNewProductModal()">➕ Nuevo</button>
+            
             <button id="admin-trigger-icon" title="Admin">⚙️</button>
             <button id="theme-toggle-btn" title="Tema">🌙</button>
         </div>
@@ -406,8 +409,43 @@
         </div>
     </div>
 
-    <!-- TOAST NOTIFICATION -->
-    <div id="toast-notification" class="toast"></div>
+        <!-- MODAL NUEVO PRODUCTO / EDITAR CON FOTO -->
+    <div id="modal-new-product" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="new-prod-title">➕ Agregar Producto</h3>
+                <button class="close-modal" onclick="closeModal('modal-new-product')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-new-product">
+                    <input type="hidden" id="np-id"> <!-- Para edición -->
+                    
+                    <!-- SECCIÓN FOTOS -->
+                    <div class="form-group">
+                        <label class="form-label">Foto del Producto *</label>
+                        <input type="file" id="np-file" accept="image/*" style="display:none;">
+                        <div id="np-preview-container" style="width:100%; height:150px; border:2px dashed #cbd5e1; border-radius:8px; display:flex; align-items:center; justify-content:center; background:#f8fafc; cursor:pointer; overflow:hidden;" onclick="document.getElementById('np-file').click()">
+                            <span id="np-preview-text" style="color:#64748b; font-size:0.9rem;">📷 Toca para subir foto</span>
+                            <img id="np-preview-img" src="" alt="Preview" style="max-width:100%; max-height:100%; object-fit:contain; display:none;">
+                        </div>
+                        <small style="color:#64748b; display:block; margin-top:5px;">Se comprimirá automáticamente.</small>
+                    </div>
+
+                    <!-- DATOS BÁSICOS -->
+                    <div class="form-group"><label class="form-label">Nombre *</label><input type="text" id="np-name" class="form-input" required placeholder="Ej: Gorra New Era"></div>
+                    <div class="form-group"><label class="form-label">Precio (RD$) *</label><input type="number" step="0.01" id="np-price" class="form-input" required placeholder="0.00"></div>
+                    <div class="form-group"><label class="form-label">Categoría *</label><input type="text" id="np-category" class="form-input" required list="cat-options" placeholder="Ej: Ropa"></div>
+                    <datalist id="cat-options-np"></datalist> <!-- Datalist específico para este modal si hace falta -->
+                    <div class="form-group"><label class="form-label">Stock Inicial</label><input type="number" id="np-stock" class="form-input" value="1" min="0"></div>
+                    <div class="form-group"><label class="form-label">Descripción Corta</label><textarea id="np-desc" class="form-input" rows="2" placeholder="Detalles breves..."></textarea></div>
+                    <div class="form-group"><label class="form-label">WhatsApp Proveedor (Opcional)</label><input type="tel" id="np-supplier" class="form-input" placeholder="+1809..."></div>
+                    
+                    <button type="submit" class="btn-primary" id="np-submit-btn">Guardar Producto</button>
+                    <button type="button" class="btn-secondary" onclick="closeModal('modal-new-product')">Cancelar</button>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <script>
                 // ==========================================
@@ -1024,9 +1062,204 @@
                 }, 500);
             }
         }
-                    // ==========================================
-        // INICIALIZACIÓN FINAL SEGURA
+                            // ==========================================
+        // SISTEMA DE SUBIDA DE FOTOS & NUEVO PRODUCTO
         // ==========================================
+        
+        let currentImageFile = null; // Guarda el archivo temporalmente
+
+        function openNewProductModal() {
+            if (!state.isAdmin) return showToast("Acceso denegado", "error");
+            
+            // Resetear formulario
+            document.getElementById('form-new-product').reset();
+            document.getElementById('np-id').value = '';
+            document.getElementById('np-preview-img').style.display = 'none';
+            document.getElementById('np-preview-text').style.display = 'block';
+            document.getElementById('new-prod-title').textContent = "➕ Agregar Producto";
+            document.getElementById('np-submit-btn').textContent = "Guardar Producto";
+            currentImageFile = null;
+
+            // Cargar categorías disponibles para autocompletar
+            const dl = document.getElementById('cat-options');
+            if(dl && state.products.length > 0) {
+                 const uniqueCats = [...new Set(state.products.map(p => p.category).filter(Boolean))].sort();
+                 dl.innerHTML = uniqueCats.map(c => `<option value="${escapeHtml(c)}">`).join('');
+            }
+
+            openModal('modal-new-product');
+        }
+
+        // Manejar selección de archivo
+        document.getElementById('np-file').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Validar tipo
+            if (!file.type.startsWith('image/')) {
+                showToast("Solo se permiten imágenes", "error");
+                return;
+            }
+
+            // Mostrar preview inmediato
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = document.getElementById('np-preview-img');
+                img.src = event.target.result;
+                img.style.display = 'block';
+                document.getElementById('np-preview-text').style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+
+            // Guardar referencia al archivo real
+            currentImageFile = file;
+        });
+
+        // Función auxiliar para comprimir imagen usando Canvas
+        function compressImage(file, maxWidth = 800, quality = 0.7) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                img.onload = () => {
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > maxWidth) {
+                        height *= maxWidth / width;
+                        width = maxWidth;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    canvas.toBlob(blob => resolve(blob), 'image/jpeg', quality);
+                };
+                img.onerror = reject;
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        // Submit Formulario Nuevo/Editar Producto
+        document.getElementById('form-new-product').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('np-submit-btn');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Subiendo...";
+
+            try {
+                const name = document.getElementById('np-name').value.trim();
+                const price = parseFloat(document.getElementById('np-price').value);
+                const category = document.getElementById('np-category').value.trim();
+                const stock = parseInt(document.getElementById('np-stock').value) || 0;
+                const desc = document.getElementById('np-desc').value.trim();
+                const supplier = document.getElementById('np-supplier').value.trim();
+                const existingId = document.getElementById('np-id').value;
+
+                let imageUrl = '';
+
+                // 1. Si hay foto nueva, subirla y comprimirla
+                if (currentImageFile) {
+                    showToast("Optimizando imagen...", "info");
+                    const compressedBlob = await compressImage(currentImageFile);
+                    const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+                    
+                    const { data, error } = await supabaseClient.storage
+                        .from('productos')
+                        .upload(fileName, compressedBlob, { cacheControl: '3600', upsert: false });
+                    
+                    if (error) throw new Error("Error subiendo foto: " + error.message);
+                    
+                    const { data: urlData } = supabaseClient.storage.from('productos').getPublicUrl(fileName);
+                    imageUrl = urlData.publicUrl;
+                } else if (existingId) {
+                    // Si es edición y NO se cambió la foto, mantener la anterior
+                    const oldProd = state.products.find(p => p.id === existingId);
+                    imageUrl = oldProd ? oldProd.image_url : '';
+                }
+
+                // 2. Preparar datos para BD
+                const productData = {
+                    name,
+                    price,
+                    category,
+                    stock,
+                    description: desc,
+                    supplier_whatsapp: supplier,
+                    image_url: imageUrl,
+                    is_active: true
+                };
+
+                // 3. Insertar o Actualizar
+                let result;
+                if (existingId) {
+                    result = await supabaseClient.from('products').update(productData).eq('id', existingId);
+                } else {
+                    result = await supabaseClient.from('products').insert([productData]);
+                }
+
+                if (result.error) throw result.error;
+
+                showToast(existingId ? "Producto actualizado ✅" : "Producto creado ✅", "success");
+                closeModal('modal-new-product');
+                await fetchProducts(); // Recargar catálogo
+
+            } catch (err) {
+                console.error(err);
+                showToast("Error: " + err.message, "error");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        });
+
+        // Modificar editProduct existente para usar el nuevo modal
+        const originalEditProduct = window.editProduct;
+        window.editProduct = function(id) {
+            const prod = state.products.find(p => p.id === id);
+            if (!prod) return;
+
+            // Llenar campos del modal nuevo
+            document.getElementById('np-id').value = prod.id;
+            document.getElementById('np-name').value = prod.name;
+            document.getElementById('np-price').value = prod.price;
+            document.getElementById('np-category').value = prod.category || '';
+            document.getElementById('np-stock').value = prod.stock;
+            document.getElementById('np-desc').value = prod.description || '';
+            document.getElementById('np-supplier').value = prod.supplier_whatsapp || '';
+            
+            // Preview de imagen existente
+            const imgPrev = document.getElementById('np-preview-img');
+            const txtPrev = document.getElementById('np-preview-text');
+            if (prod.image_url) {
+                imgPrev.src = prod.image_url;
+                imgPrev.style.display = 'block';
+                txtPrev.style.display = 'none';
+            } else {
+                imgPrev.style.display = 'none';
+                txtPrev.style.display = 'block';
+            }
+            
+            document.getElementById('new-prod-title').textContent = "✏️ Editar Producto";
+            document.getElementById('np-submit-btn').textContent = "Actualizar Cambios";
+            currentImageFile = null; // Resetear subida pendiente
+
+            openModal('modal-new-product');
+        };
+
+        // Mostrar botón "+" cuando entra admin
+        const observer = new MutationObserver(() => {
+            if (document.body.classList.contains('is-admin')) {
+                document.getElementById('add-product-btn')?.classList.remove('hidden');
+            } else {
+                document.getElementById('add-product-btn')?.classList.add('hidden');
+            }
+        });
+        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
         document.addEventListener('DOMContentLoaded', async () => {
             checkAdminSession(); // Restaura sesión admin si existía
             
