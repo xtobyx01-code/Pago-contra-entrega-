@@ -504,26 +504,43 @@
             }
         }
 
-        function renderSidebarMenu() {
+                async function renderSidebarMenu() {
             const nav = document.getElementById('category-nav-list');
             if (!nav) return;
             
             // 1. Determinar qué categoría está activa actualmente
             const currentCat = state.currentCategory || "";
             
-            // 2. Construir HTML base con "Todos"
+            // 2. Intentar leer de tabla categories si existe, sino fallback a products
+            let catsToRender = [];
+            
+            try {
+                const { data: catData, error: catErr } = await supabaseClient.from('categories').select('*').order('sort_order');
+                
+                if (!catErr && catData && catData.length > 0) {
+                    catsToRender = catData.map(c => ({ name: c.name, icon: c.icon || '📦' }));
+                } else {
+                    // Fallback: Extraer únicas de productos actuales
+                    const uniqueCats = [...new Set(state.products.map(p => p.category).filter(Boolean))];
+                    catsToRender = uniqueCats.sort().map(name => ({ name, icon: '📦' }));
+                }
+            } catch (err) {
+                console.warn("Error cargando categorías:", err);
+                // Fallback seguro
+                const uniqueCats = [...new Set(state.products.map(p => p.category).filter(Boolean))];
+                catsToRender = uniqueCats.sort().map(name => ({ name, icon: '📦' }));
+            }
+
+            // 3. Construir HTML base con "Todos"
             let html = `<a href="#" data-cat="" class="cat-item ${currentCat === "" ? 'active' : ''}" onclick="setCategory('', event)">
                 <i>🏠</i> Todos los productos
             </a>`;
 
-            // 3. Extraer categorías únicas ordenadas DESDE LOS PRODUCTOS
-            const uniqueCats = [...new Set(state.products.map(p => p.category).filter(Boolean))].sort();
-            
             // 4. Generar enlaces de categorías dinámicas
-            uniqueCats.forEach(catName => {
-                const isActive = currentCat === catName ? 'active' : '';
-                html += `<a href="#" data-cat="${escapeHtml(catName)}" class="cat-item ${isActive}" onclick="setCategory('${escapeHtml(catName)}', event)">
-                    <i>📦</i> ${escapeHtml(catName)}
+            catsToRender.forEach(c => {
+                const isActive = currentCat === c.name ? 'active' : '';
+                html += `<a href="#" data-cat="${escapeHtml(c.name)}" class="cat-item ${isActive}" onclick="setCategory('${escapeHtml(c.name)}', event)">
+                    <i>${c.icon}</i> ${escapeHtml(c.name)}
                 </a>`;
             });
 
@@ -540,7 +557,7 @@
             // 7. Actualizar datalist para autocompletado en editor de productos
             const dl = document.getElementById('cat-options');
             if(dl) {
-                dl.innerHTML = uniqueCats.map(c => `<option value="${escapeHtml(c)}">`).join('');
+                dl.innerHTML = catsToRender.map(c => `<option value="${escapeHtml(c.name)}">`).join('');
             }
         }
 
