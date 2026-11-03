@@ -814,12 +814,20 @@
             }
         }
 
-        function setCategory(cat) {
+                function setCategory(cat, event) {
+            if(event) event.preventDefault(); // Evita salto de página
+            
             state.currentCategory = cat;
-            document.querySelectorAll('.cat-item').forEach(el => {
-                el.classList.toggle('active', el.dataset.cat === cat);
-            });
+            
+            // Redibuja el grid de productos
             renderProductGrid();
+            
+            // IMPORTANTE: Vuelve a dibujar el menú lateral para actualizar clases 'active'
+            // Esto asegura que si estabas en "Ropa" y vas a "Calzado", el highlight se mueva.
+            renderSidebarMenu(); 
+            
+            // Cierra el drawer automáticamente tras selección (UX móvil)
+            toggleDrawer(false);
         }
 
         // INIT
