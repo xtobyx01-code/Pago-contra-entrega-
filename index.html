@@ -1024,22 +1024,29 @@
                 }, 500);
             }
         }
-            checkAdminSession(); // Restaura sesión si existía
+                    // ==========================================
+        // INICIALIZACIÓN FINAL SEGURA
+        // ==========================================
+        document.addEventListener('DOMContentLoaded', async () => {
+            checkAdminSession(); // Restaura sesión admin si existía
             
+            // Cargar tema guardado
             if (localStorage.getItem('pcd_theme') === 'dark') {
                 document.body.classList.add('dark-mode');
                 const tb = document.getElementById('theme-toggle-btn');
                 if(tb) tb.textContent = '☀️';
             }
             
-                        setupEventListeners();
+            setupEventListeners();
             await loadAppSettings();
             await fetchProducts();
             
-            // Procesar hash inicial si existe
-            if(window.location.hash) {
-                handleHashChange();
-            }
+            // Procesar hash inicial si existe (para links directos)
+            setTimeout(() => {
+                if(window.location.hash) {
+                    handleHashChange();
+                }
+            }, 800);
         });
 
     </script>
