@@ -528,59 +528,44 @@ const SUPABASE_ANON_KEY = 'sb_publishable_0z18tR6XR7cGhz5ZzYe1qg_jXzChlr8';
             }
         }
 
-                // ==========================================
-        // RENDERIZADO SIDEBAR CON CATEGORÍAS DINÁMICAS
+                        // ==========================================
+        // RENDERIZADO SIDEBAR (CORREGIDO SIN TABLA EXTERNA)
         // ==========================================
-        async function renderSidebarMenu() {
+        function renderSidebarMenu() {
             const nav = document.getElementById('category-nav-list');
             if (!nav) return;
             
-            // Limpiar menú excepto "Todos"
+            // 1. Limpiar menú y agregar "Todos"
             nav.innerHTML = '<a href="#" data-cat="" class="cat-item active"><i>🏠</i> Todos los productos</a>';
             
-            try {
-                // Intentar leer de tabla categories si existe, sino fallback a products
-                let catsToRender = [];
-                
-                // Verificamos si tenemos permiso/data de categories
-                const { data: catData, error: catErr } = await supabaseClient.from('categories').select('*').order('sort_order');
-                
-                if (!catErr && catData && catData.length > 0) {
-                    catsToRender = catData.map(c => ({ name: c.name, icon: c.icon || '📦' }));
-                } else {
-                    // Fallback: Extraer únicas de productos actuales
-                    const uniqueCats = [...new Set(state.products.map(p => p.category).filter(Boolean))];
-                    catsToRender = uniqueCats.sort().map(name => ({ name, icon: '📦' }));
-                }
+            // 2. Extraer categorías ÚNICAS directamente de state.products
+            // Esto elimina la dependencia de la tabla 'categories' inexistente
+            const uniqueCats = [...new Set(state.products.map(p => p.category).filter(Boolean))].sort();
+            
+            // 3. Renderizar cada categoría encontrada
+            uniqueCats.forEach(catName => {
+                const a = document.createElement('a');
+                a.href = '#';
+                a.dataset.cat = catName;
+                a.className = 'cat-item';
+                a.innerHTML = `<i>📦</i> ${escapeHtml(catName)}`;
+                a.onclick = (e) => {
+                    e.preventDefault();
+                    setCategory(catName);
+                    toggleDrawer(false);
+                };
+                nav.appendChild(a);
+            });
 
-                // Renderizar categorías
-                catsToRender.forEach(c => {
-                    const a = document.createElement('a');
-                    a.href = '#';
-                    a.dataset.cat = c.name;
-                    a.className = 'cat-item';
-                    a.innerHTML = `<i>${c.icon}</i> ${escapeHtml(c.name)}`;
-                    a.onclick = (e) => {
-                        e.preventDefault();
-                        setCategory(c.name);
-                        toggleDrawer(false);
-                    };
-                    nav.appendChild(a);
-                });
-
-                // BOTÓN AGREGAR CATEGORIA (Solo Visible Admin)
-                if (state.isAdmin) {
-                    const btnAdd = document.createElement('button');
-                    btnAdd.type = 'button'; // Importante para forms
-                    btnAdd.className = 'cat-item add-cat-btn';
-                    btnAdd.style.cssText = "margin-top:15px; background:#f8fafc; border:2px dashed #cbd5e1; color:#64748b; font-weight:600; width:100%; text-align:left; padding:12px 20px; cursor:pointer;";
-                    btnAdd.innerHTML = '➕ Agregar Nueva Categoría';
-                    btnAdd.onclick = () => openAddCategoryModal();
-                    nav.appendChild(btnAdd);
-                }
-
-            } catch (err) {
-                console.error("Error sidebar:", err);
+            // 4. Botón Admin (Opcional - Alerta simple por ahora)
+            if (state.isAdmin) {
+                const btnAdd = document.createElement('button');
+                btnAdd.type = 'button';
+                btnAdd.className = 'cat-item';
+                btnAdd.style.cssText = "margin-top:15px; background:#f8fafc; border:2px dashed #cbd5e1; color:#64748b; font-weight:600; width:calc(100% - 40px); margin-left:20px; padding:10px; cursor:pointer; border-radius:8px;";
+                btnAdd.innerHTML = '➕ Nueva Categoría';
+                btnAdd.onclick = () => alert("Para crear categorías permanentes, necesitas ejecutar el SQL de la tabla 'categories'. Por ahora usa nombres nuevos al editar productos.");
+                nav.appendChild(btnAdd);
             }
         }
 
