@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pago Contra Entrega - Tienda COD</title>
+    
+    <!-- Favicon & Manifest PWA -->
+    <link rel="icon" type="image/png" href="assets/favicon-square.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#FF9900">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- Librería Oficial Supabase JS v2 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Fuentes Google Fonts (Inter/Poppins para look moderno limpio) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="light-mode">
+    <!-- Overlay para menú lateral móvil -->
+    <div id="menu-overlay" class="overlay hidden"></div>
+
+    <!-- MENÚ LATERAL (DRAWER) -->
+    <aside id="side-menu" class="side-drawer hidden">
+        <div class="drawer-header">
+            <button id="close-drawer-btn" aria-label="Cerrar menú">✕</button>
+            <h2>Categorías</h2>
+        </div>
+        <nav id="category-nav-list" class="drawer-nav">
+            <!-- Se llenará dinámicamente desde JS leyendo DB -->
+            <a href="#" data-cat="" class="active">🏠 Inicio / Todos</a>
+        </nav>
+        <footer class="drawer-footer">
+            <p>&copy; 2026 Pago Contra Entrega</p>
+            <small>Gestión logística integrada vía WhatsApp.</small>
+        </footer>
+    </aside>
+
+    <!-- HEADER PRINCIPAL ESTILO AMAZON -->
+    <header class="main-header sticky-top">
+        <div class="header-left">
+            <button id="open-drawer-btn" aria-label="Abrir menú categorías">☰</button>
+            <a href="/" class="logo-link">
+                <img src="assets/logo-horizontal.png" alt="Pago Contra Entrega Logo" class="site-logo">
+            </a>
+        </div>
+        
+        <div class="header-center search-container">
+            <input type="text" id="global-search-input" placeholder="Buscar productos... ej: gorras, zapatos">
+            <button id="search-submit-btn" aria-label="Buscar">🔍</button>
+        </div>
+
+        <div class="header-right actions">
+            <!-- Icono Admin Discreto (Triple click o long press activará login) -->
+            <button id="admin-trigger-icon" title="Acceso Administrador" style="opacity:0.3;">⚙️</button>
+            
+            <!-- Botón Modo Oscuro Manual -->
+            <button id="theme-toggle-btn" title="Cambiar tema">🌙</button>
+        </div>
+    </header>
+
+    <!-- CONTENIDO PRINCIPAL GRID PRODUCTOS -->
+    <main id="product-grid-container" class="content-wrapper">
+        <section id="filters-bar" class="horizontal-filters hidden">
+             <!-- Chips filtros rápidos generados por JS -->
+        </section>
+        
+        <div id="products-display-area" class="products-grid">
+            <!-- Tarjetas producto insertadas aquí por renderProducts() -->
+            <div class="loading-state">Cargando catálogo...</div>
+        </div>
+        
+        <div id="empty-state-msg" class="empty-message hidden">
+            <span>😕</span>
+            <p>No hay productos disponibles en esta categoría.</p>
+            <button onclick="resetFilters()">Ver todos</button>
+        </div>
+    </main>
+
+    <!-- MODALES (Solicitud, Login Admin, Editar Producto) -->
+    <!-- Los definimos vacíos aquí y los populamos con innerHTML desde JS para mantener HTML limpio -->
+    <div id="modal-request-order" class="modal-overlay hidden"></div>
+    <div id="modal-admin-login" class="modal-overlay hidden"></div>
+    <div id="modal-product-editor" class="modal-overlay hidden"></div>
+    <div id="toast-notification" class="toast hidden"></div>
+
+    <!-- SCRIPTS LÓGICA APP -->
+    <script>
+        // === CONFIGURACIÓN SUPABASE #2 ===
+        const SUPABASE_URL = 'https://zktwsgjvpborprfkkjk.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_0z18tR6XR7cGhz5ZzYe1q-g_jXzChlr8';
+        const ADMIN_EMAIL = 'xtobyx001@gmail.com'; // Para validación extra opcional
+        
+        let supabaseClient;
+        try {
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        } catch(e) {
+            console.error("Error init Supabase:", e);
+        }
+
+        // ESTADO GLOBAL APP
+        const state = {
+            products: [],
+            categories: [],
+            currentCategory: null,
+            searchTerm: '',
+            isAdmin: false,
+            settings: {}, // whatsapp_number, store_name, etc.
+            spamAttempts: JSON.parse(localStorage.getItem('pcd_spam_log') || '{}'),
+            blockedPhones: [] 
+        };
+
+        // UTILIDADES BÁSICAS
+        function showToast(msg, type='info') {
+            const toast = document.getElementById('toast-notification');
+            toast.textContent = msg;
+            toast.className = `toast show ${type}`;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // GENERADOR CÓDIGO ÚNICO ORDEN
+        function generateOrderCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let result = 'ORD-';
+            for (let i = 0; i < 5; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        // NORMALIZAR TELÉFONO RD (+1809...)
+        function normalizePhoneRD(raw) {
+            let clean = String(raw).replace(/\D/g, '');
+            if (clean.length === 10) return '+1' + clean;
+            if (clean.startsWith('1') && clean.length === 11) return '+' + clean;
+            return null; // Inválido
+        }
+
+        // INICIALIZACIÓN AL CARGAR PÁGINA
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadAppSettings();
+            checkAuthSession(); // Verifica si hay sesión admin activa previa
+            
+            // Eventos Globales UI
+            setupEventListeners(); 
+            
+            // Carga Datos Core
+            await fetchCategoriesAndProducts();
+            
+            // Render Inicial
+            renderProductGrid();
+            updateHeaderDynamicContent();
+        });
+
+        // ... EL RESTO DE FUNCIONES IRÁN EN LAS SIGUIENTES PARTES ...
+    </script>
+</body>
+</html>
