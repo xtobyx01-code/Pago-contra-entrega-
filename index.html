@@ -607,7 +607,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         
         <div class="form-row">
           <div class="form-group"><label class="form-label">Categoría *</label><input type="text" id="np-category" class="form-input" required list="cat-options" placeholder="Ej: Electrónica"><datalist id="cat-options"></datalist></div>
-          <div class="form-group"><label class="form-label">Stock</label><input type="number" id="np-stock" class="form-input" min="0" value="1"></div>
+          
+          <div class="form-group">
+            <label class="form-label">Disponibilidad</label>
+            <input type="number" id="np-stock" value="10" hidden>
+            <div style="display:flex; gap:6px;">
+              <button type="button" id="btn-stock-available" onclick="setStockStatus('available')" style="flex:1; padding:12px 4px; border-radius:11px; border:2px solid var(--green); background:rgba(18,167,106,0.1); color:var(--green); font-weight:800; font-size:11px;">
+                ✅ Disponible
+              </button>
+              <button type="button" id="btn-stock-out" onclick="setStockStatus('out')" style="flex:1; padding:12px 4px; border-radius:11px; border:2px solid var(--border); background:var(--bg); color:var(--muted); font-weight:800; font-size:11px;">
+                ❌ Agotado
+              </button>
+            </div>
+          </div>
         </div>
         
         <div class="form-group"><label class="form-label">SKU (Opcional - se genera solo)</label><input type="text" id="np-sku" class="form-input" maxlength="60" placeholder="Dejar vacío para automático"></div>
@@ -1862,51 +1874,100 @@ async function logoutAdmin() {
 /* =====================================================
    EDITAR / DESACTIVAR PRODUCTO
 ===================================================== */
-function editProduct(id) {
-  if (!state.isAdmin) return;
-  const product = state.products.find(item => String(item.id) === String(id));
-  if (!product) return;
-  document.getElementById('np-id').value = product.id;
-  document.getElementById('np-name').value = product.name;
-  document.getElementById('np-price').value = product.price;
-  document.getElementById('np-sale-price').value = product.sale_price || '';
-  document.getElementById('np-category').value = product.category || '';
-  document.getElementById('np-stock').value = product.stock ?? 0;
-  document.getElementById('np-sku').value = product.sku || '';
-  document.getElementById('np-desc').value = product.description || '';
-  document.getElementById('np-supplier').value = product.supplier_whatsapp || '';
-  document.getElementById('np-featured').checked = !!product.is_featured;
-  document.getElementById('np-active').checked = product.is_active !== false;
-  document.getElementById('np-file').value = '';
+function setStockStatus(status) {
+  const btnAvailable = document.getElementById('btn-stock-available');
+  const btnOut = document.getElementById('btn-stock-out');
+  const hiddenStock = document.getElementById('np-stock');
   
-  currentImageFile = null;
-  currentMultiFiles = [];
-  document.getElementById('np-multi-preview').innerHTML = '';
+  if (!btnAvailable || !btnOut || !hiddenStock) return;
   
-  const preview = document.getElementById('np-preview-img');
-  const previewText = document.getElementById('np-preview-text');
-  if (product.image_url) {
-    preview.src = product.image_url;
-    preview.style.display = 'block';
-    previewText.style.display = 'none';
+  if (status === 'available') {
+    hiddenStock.value = 10;
+    btnAvailable.style.border = '2px solid var(--green)';
+    btnAvailable.style.background = 'rgba(18,167,106,0.1)';
+    btnAvailable.style.color = 'var(--green)';
+    
+    btnOut.style.border = '2px solid var(--border)';
+    btnOut.style.background = 'var(--bg)';
+    btnOut.style.color = 'var(--muted)';
   } else {
-    preview.style.display = 'none';
-    previewText.style.display = 'block';
+    hiddenStock.value = 0;
+    btnOut.style.border = '2px solid var(--red)';
+    btnOut.style.background = 'rgba(233,75,75,0.1)';
+    btnOut.style.color = 'var(--red)';
+    
+    btnAvailable.style.border = '2px solid var(--border)';
+    btnAvailable.style.background = 'var(--bg)';
+    btnAvailable.style.color = 'var(--muted)';
   }
-  
-  // Cargar fotos adicionales existentes si las hay
-  supabaseClient.from('product_images').select('*').eq('product_id', id).order('orden').then(({data}) => {
-    if (data && data.length > 0) {
-      const previewContainer = document.getElementById('np-multi-preview');
-      previewContainer.innerHTML = data.map(img => `
-        <img src="${escapeHtml(safeImageUrl(img.url))}" style="width:55px; height:55px; object-fit:cover; border-radius:10px; border:1px solid var(--border);">
-      `).join('');
-    }
-  });
+}
 
-  document.getElementById('new-prod-title').textContent = '✏️ Editar producto';
-  document.getElementById('np-submit-btn').textContent = 'Actualizar producto';
-  openModal('modal-new-product');
+function editProduct(id) {
+  if (!state.isAdmin) { showToast('Acceso restringido.', 'error'); return; }
+  
+  const product = state.products.find(item => String(item.id) === String(id));
+  if (!product) { showToast('Producto no encontrado.', 'error'); return; }
+  
+  try {
+    // 1. Llenar los campos básicos
+    document.getElementById('np-id').value = product.id;
+    document.getElementById('np-name').value = product.name || '';
+    document.getElementById('np-price').value = product.price || '';
+    document.getElementById('np-sale-price').value = product.sale_price || '';
+    document.getElementById('np-category').value = product.category || '';
+    document.getElementById('np-sku').value = product.sku || '';
+    document.getElementById('np-desc').value = product.description || '';
+    document.getElementById('np-supplier').value = product.supplier_whatsapp || '';
+    document.getElementById('np-featured').checked = !!product.is_featured;
+    document.getElementById('np-active').checked = product.is_active !== false;
+    document.getElementById('np-file').value = '';
+    
+    // 2. Detectar y marcar el estado de disponibilidad (convertimos a número para evitar errores)
+    const currentStock = Number(product.stock) || 0;
+    if (currentStock > 0) {
+      setStockStatus('available');
+    } else {
+      setStockStatus('out');
+    }
+    
+    // 3. Limpiar archivos de imagen
+    currentImageFile = null;
+    currentMultiFiles = [];
+    document.getElementById('np-multi-preview').innerHTML = '';
+    
+    // 4. Mostrar foto principal
+    const preview = document.getElementById('np-preview-img');
+    const previewText = document.getElementById('np-preview-text');
+    if (product.image_url) {
+      preview.src = safeImageUrl(product.image_url);
+      preview.style.display = 'block';
+      previewText.style.display = 'none';
+    } else {
+      preview.style.display = 'none';
+      previewText.style.display = 'block';
+    }
+    
+    // 5. Cargar fotos adicionales
+    supabaseClient.from('product_images').select('*').eq('product_id', id).order('orden').then(({data}) => {
+      if (data && data.length > 0) {
+        const previewContainer = document.getElementById('np-multi-preview');
+        previewContainer.innerHTML = data.map(img => `
+          <img src="${escapeHtml(safeImageUrl(img.url))}" style="width:55px; height:55px; object-fit:cover; border-radius:10px; border:1px solid var(--border);">
+        `).join('');
+      }
+    });
+
+    // 6. Cambiar textos del modal
+    document.getElementById('new-prod-title').textContent = '✏️ Editar producto';
+    document.getElementById('np-submit-btn').textContent = 'Actualizar producto';
+    
+    // 7. Abrir el modal
+    openModal('modal-new-product');
+    
+  } catch (e) {
+    console.error('Error al abrir edición:', e);
+    showToast('Error al abrir el formulario: ' + e.message, 'error');
+  }
 }
 
 async function deleteProduct(id) {
@@ -1918,10 +1979,8 @@ async function deleteProduct(id) {
   if (!confirm(`¿Estás SEGURO de que quieres ELIMINAR PERMANENTEMENTE "${product.name}"?\n\nEsta acción no se puede deshacer y el producto desaparecerá de la base de datos.`)) return;
   
   try {
-    // Borramos primero las imágenes adicionales
     await supabaseClient.from('product_images').delete().eq('product_id', id);
     
-    // Luego borramos el producto
     const { error } = await supabaseClient.from('products').delete().eq('id', id);
     if (error) throw error;
     
@@ -2027,6 +2086,32 @@ function compressImage(file, maxWidth = 1000, quality = 0.78) {
 }
 
 /* =====================================================
+   CONTROL DE DISPONIBILIDAD (STOCK)
+===================================================== */
+function openNewProductModal() {
+  if (!state.isAdmin) { showToast('Acceso restringido.', 'error'); return; }
+  
+  document.getElementById('form-new-product').reset();
+  document.getElementById('np-id').value = '';
+  document.getElementById('np-file').value = '';
+  document.getElementById('np-preview-img').style.display = 'none';
+  document.getElementById('np-preview-text').style.display = 'block';
+  document.getElementById('new-prod-title').textContent = '➕ Agregar producto';
+  document.getElementById('np-submit-btn').textContent = 'Guardar producto';
+  document.getElementById('np-active').checked = true;
+  
+  currentImageFile = null;
+  currentMultiFiles = [];
+  document.getElementById('np-multi-preview').innerHTML = '';
+  
+  // AQUÍ ESTÁ EL CAMBIO 4 👇
+  setStockStatus('available'); 
+  // 👆 Esta línea es la que hace que el botón verde se marque por defecto
+  
+  openModal('modal-new-product');
+}
+
+/* =====================================================
    NUEVO PRODUCTO
 ===================================================== */
 function openNewProductModal() {
@@ -2043,6 +2128,9 @@ function openNewProductModal() {
   currentImageFile = null;
   currentMultiFiles = [];
   document.getElementById('np-multi-preview').innerHTML = '';
+  
+  // Inicializar el selector de stock en "Disponible"
+  setStockStatus('available');
   
   openModal('modal-new-product');
 }
@@ -2064,7 +2152,10 @@ document.getElementById('form-new-product').addEventListener('submit', async eve
     const salePriceRaw = document.getElementById('np-sale-price').value.trim();
     const salePrice = salePriceRaw ? parseFloat(salePriceRaw) : null;
     const category = document.getElementById('np-category').value.trim();
+    
+    // CORRECCIÓN: Leer el stock del input oculto
     const stock = parseInt(document.getElementById('np-stock').value) || 0;
+    
     let sku = document.getElementById('np-sku').value.trim();
     const description = document.getElementById('np-desc').value.trim();
     const supplier = document.getElementById('np-supplier').value.trim();
